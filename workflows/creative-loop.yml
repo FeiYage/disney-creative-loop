@@ -1,0 +1,89 @@
+name: "迪士尼创意循环工作流"
+version: "1.0"
+
+# 输入端
+input:
+  user_idea: "用户原始点子"      # 来源于对话
+  iteration: 0                    # 初始循环次数
+  previous_feedback: ""            # 初始为空
+  best_score: 0                    # 当前最高分
+  best_plan: ""                    # 当前最佳方案
+
+steps:
+  - id: "dreamer_phase"
+    name: "第一阶段：梦想家构想"
+    desc: "执行一次，输出终极愿景"
+    role: "dreamer"
+    action: "generate_vision"
+    output_var: "vision"
+    loop: false  # 梦想家只在第一轮执行
+    
+  - id: "loop_check"
+    name: "循环判断"
+    desc: "检查当前循环次数和分数是否满足要求"
+    conditions:
+      - if: "iteration == 0"
+        then: "realist_phase"
+      - if: "iteration > 0"
+        then: "realist_improve_phase"
+    
+  - id: "realist_phase"
+    name: "第二阶段(首次)：实干家构建方案"
+    desc: "基于愿景创建初版实施方案"
+    role: "realist"
+    action: "build_plan"
+    inputs:
+      vision: "{{vision}}"
+      user_idea: "{{user_idea}}"
+    output_var: "plan"
+    
+  - id: "realist_improve_phase"
+    name: "第二阶段(迭代)：实干家改进方案"
+    desc: "基于批评家反馈优化方案"
+    role: "realist"
+    action: "improve_plan"
+    inputs:
+      previous_plan: "{{plan}}"
+      feedback: "{{previous_feedback}}"
+      vision: "{{vision}}"
+    output_var: "plan"
+    
+  - id: "critic_phase"
+    name: "第三阶段：批评家评估"
+    desc: "打分并提出改进建议"
+    role: "critic"
+    action: "evaluate_plan"
+    inputs:
+      plan: "{{plan}}"
+      vision: "{{vision}}"
+      user_idea: "{{user_idea}}"
+    outputs:
+      score: "number"
+      weaknesses: "string"
+      suggestions: "string"
+    
+  - id: "score_check"
+    name: "分数判定"
+    desc: "判断是否达到目标分数（每次循环必须执行）"
+    condition: "score >= {{target_score}}"
+    true_action: "output_final_report"
+    false_action: "continue_loop"
+    
+  - id: "continue_loop"
+    name: "继续循环"
+    desc: "更新变量并进入下一轮迭代"
+    actions:
+      - "iteration += 1"
+      - "previous_feedback = {{critic_phase.suggestions}}"
+      - "if score > best_score: best_score = score, best_plan = plan"
+      - "if iteration > max_iterations: dump_best_result; else: goto realist_improve_phase"
+    
+  - id: "output_final_report"
+    name: "输出最终方案报告"
+    desc: "组装并输出最终结果"
+    action: "format_report"
+    inputs:
+      vision: "{{vision}}"
+      final_plan: "{{plan}}"
+      final_score: "{{score}}"
+      iterations: "{{iteration}}"
